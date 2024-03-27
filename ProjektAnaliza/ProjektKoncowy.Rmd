@@ -1,0 +1,451 @@
+---
+title: "Projekt zaliczeniowy"
+author: "Damian Grochowiec"
+date: "2023-11-24"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 2
+---
+
+```{r, setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE)
+```
+
+
+# Wstęp
+ 
+####  *E-sport, czyli sport elektroniczny, to forma rywalizacji, w której zawodowi gracze rywalizują ze sobą w różnych grach komputerowych. To nie tylko pasja młodego pokolenia, ale także globalne zjawisko, przyciągające miliony widzów, sponsorów, a także generujące setki milionów dolarów rocznie. Gry takie jak League of Legends, Dota 2, Counter-Strike: Global Offensive czy Fortnite stały się arenami nie tylko dla umiejętności graczy, ale także dla intensywnej rywalizacji i ogromnych nagród finansowych.*
+ 
+ 
+ 
+```{r, message=FALSE}
+library(readxl)
+library(mice)
+library(outliers)
+library(dplyr)
+library(ggplot2)
+library(europepmc)
+library(cowplot)
+library(lubridate)
+
+```
+ 
+ 
+```{r}
+dane <- read_excel("C:\\Users\\margr\\OneDrive\\Dokumenty\\PassMark\\BatteryMon\\HistoricalEsportData.xlsx")
+
+```
+
+# Opis zmiennych
+##### Zmienna "Date" zmienna określa datę, do której odnoszą się dane.
+
+##### Zmienna "Game" to nazwa gry, której tyczą się te dane.
+
+##### Zmienna "Earnings" oznacza pule nagród w dolarach dla poszczególnej gry.
+
+##### Zmienna "Players" informuje nas o ilości profesjonalnych graczy grający w konkretną gre w danym miesiącu.
+
+##### Zmienna "Tournaments" jest ilością turniejów organizowanych w danym czasie z konkretnej gry.
+
+# Dane
+```{r}
+str(dane)
+```
+Po wstępnej analizie zmiennych, widać, że "Earnings" są w formie napisu, jest to nieodpowiednie, ponieważ nie można na nich przeprowadzać różnych obliczeń. Zmienna "Date" jest w formie daty, lecz z godzinami które są nam zbędne. zbiór danych nie zawiera żadnych wartości pustych.
+```{r}
+dane$Date <- as.Date(dane$Date, format="%Y-%m-%d")
+```
+Zmienna "Date" została zmieniona na format ROK-MIESIĄC-DZIEŃ.
+
+```{r}
+dane$Earnings <- as.numeric(dane$Earnings)
+```
+Zmienna "Earnings" nie jest już napisem, a liczbą, przez co możemy używać jej do obliczeń.
+
+
+```{r}
+
+dane <- dane %>%
+  filter(Earnings >= 1000 & Players >= 10)
+summary(dane)
+
+```
+```{r}
+head(dane)
+```
+
+
+
+
+Postawnowiłem nie brać pod uwagę danych, które zawierają niską ilosć profesjonalnych graczy, mniej niż 10, oraz takich których pula nagród jest mniejsza niż 1000$.
+
+
+
+
+
+
+
+
+# Wpływ pandemii na E-Sport
+
+#### W czasie pandemii Covid-19, która wymusiła znaczne ograniczenia na wielu sektorach gospodarki, E-Sport wydawał się obszarem, którym mogł kontynuować swoją działalność dzięki pracy zdalnej. **Czy Pandemia Covid-19 wpłyneła na średnie pule nagród?**
+
+#### Okres Covid-19 przyjmuje na okres (2020-03-11/2021-03-11), ponieważ w owym czasie było najwięcej restrykcji.
+
+
+
+
+```{r}
+daneCovid <- dane %>%
+  filter(Date >= as.Date("2020-03-21") & Date <= as.Date("2021-03-21")) %>%
+  group_by(Month = format(Date, "%m")) %>%
+  summarise(ZarobkiCovid = mean(Earnings))
+danePrzedCovid <- dane %>%
+  filter(Date < as.Date("2020-03-21") & Date > as.Date("2019-03-21")) %>%
+group_by(Month = format(Date, "%m")) %>%
+  summarise(ZarobkiPrzedCovid = mean(Earnings))
+danePoCovid <- dane %>%
+  filter(Date > as.Date("2021-03-21") & Date < as.Date("2022-03-21")) %>%
+group_by(Month = format(Date, "%m")) %>%
+  summarise(ZarobkiPoCovid = mean(Earnings))
+
+
+wykres <- ggplot() +
+  geom_line(data = daneCovid, aes(x = as.numeric(Month), y = ZarobkiCovid / 1000000, color = "Covid"), linewidth = 1) +
+  geom_line(data = danePrzedCovid, aes(x = as.numeric(Month), y = ZarobkiPrzedCovid / 1000000, color = "Przed Covid"), linewidth = 1) +
+  geom_line(data = danePoCovid, aes(x = as.numeric(Month), y = ZarobkiPoCovid / 1000000, color = "Po Covid"), linewidth = 1) +
+  labs(title = "Średnia pula nagród w zależności od okresu Pandemicznego",
+       x = "Miesiąc",
+       y = "Średnia pula nagród (Miliony)") +
+  scale_color_manual(values = c("Covid" = "blue", "Przed Covid" = "red", "Po Covid" = "yellow")) +
+  theme_minimal() +
+  scale_x_continuous(breaks = 1:12)
+wykres
+```
+
+#### W trakcie pandemii obserwujemy pewną stabilność w puli nagród. W okresie "Przed Covid" zauważamy wyraźny wzrost nagród latem, a następnie spadek jesienią. Natomiast po okresie pandemii, w czasie "Po Covid", obserwujemy wzrost puli nagród w październiku, jednak już w listopadzie następuje gwałtowny spadek. 
+
+```{r}
+DaneSCovid <- subset(dane, Date >= as.Date("2020-03-11") & Date <= as.Date("2021-03-30"))
+DanePoCovid <- subset(dane, Date > as.Date("2021-03-11") & Date <= as.Date("2022-03-30"))
+DanePrzedCovid <- subset(dane, Date < as.Date("2020-03-11") & Date > as.Date("2019-03-30"))
+
+sredniaPo <- round(mean(DanePoCovid$Earnings), digits = 2)
+sredniaPrzed <- round(mean(DanePrzedCovid$Earnings), digits = 2)
+sredniaCovid <- round(mean(DaneSCovid$Earnings), digits = 2)
+
+paste("Średnia wartość puli nagród w okresie przed Covid:", sredniaPrzed,
+      ",Średnia wartość puli nagród w okresie Covid:", sredniaCovid,
+      ",Średnia wartość puli nagród w okresie po Covid:", sredniaPo)
+
+```
+#### Widać, że największa przeciętna wartość puli nagród, przypada na okres przed pandemią, podczas gdy najmniejsza dotyczy okresu pandemii. Można wywnioskować, że branża e-sportowa doświadczyła pewnych trudności w czasie pandemii Covid-19, widząc że średnia pula nagród jest niższa niż w okresie poza pandemią.
+
+#### **Wnioski:**
+
+#### **Spadek zarobków w okresie pandemii:** branża E-Sportowa doświadczyła trudności finansowych i organizacyjnych w związku z pandemią Covid-19.
+
+#### **Wpływ ograniczeń:** Brak publiczności na turniejach oraz przerwy między zawodami wpłyneły negatywnie na branże E-Sportową.
+
+#### **Branża E-Sportowa po pandemii:** E-Sport nie odbudował się jeszcze po pandemii.
+
+
+
+
+
+
+# Badanie najbardziej dochodowej gry
+
+#### Wysokość puli nagród w esporcie jest uwarunkowana przez szereg czynników, z głównym naciskiem na popularność danej gry. Każda dyscyplina esportowa generuje swoje przychody, a wartość puli nagród może znacznie różnić się w zależności od różnorodnych elementów, takich jak rodzaj gry czy inne czynniki wpływające na jej atrakcyjność. **Która gra generuje największą średnią wartość puli nagród?**
+
+
+
+```{r}
+PrzychodyZGier <- tapply(dane$Earnings, dane$Game, mean, na.omit = TRUE)
+PrzychodyZGierLiczba <- format(PrzychodyZGier, scientific = F)
+PrzychodyZGierLiczba <- as.numeric(PrzychodyZGierLiczba)
+PrzychodyZGierLiczba <- PrzychodyZGier / 1000000
+PrzychodyZGierLiczba <- round(PrzychodyZGierLiczba, digits = 2)
+table <- data.frame(Game = names(PrzychodyZGier), Earnings = PrzychodyZGierLiczba)
+top <- arrange(table, desc(Earnings))
+top8 <- head(top, 8)
+top8$Game[3] <- "BATTLEGROUNDS Mobile"
+top8$Game[8] <- "BATTLEGROUNDS"
+print(top8)
+
+
+
+```
+
+
+```{r}
+wykres <- ggplot(top8, aes(x = Earnings , y = Game)) +
+  geom_col(fill = "skyblue") +
+  labs(title = "Średnia pula nagród w zależności od gry (w milionach.)", x = "Średnia wartość puli nagród", y = "Gry") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(hjust = 1))
+
+wykres
+```
+
+
+
+
+
+#### Na podstawie wizualizacji widzimy, że gra "Fortnite" ma największą przeciętną wartość puli nagród, oznacza to, że to ona jest najbardziej dochodowa, na drugim miejscu znajduje się "Dota 2", której wartość dochodów rózni się o 0,17 miliona dolarów. Widać, że następne gry są dużo mniej dochodowe, ponieważ "BATTLEGROUNDS Mobile", które znajduje się na trzecim miejscu różni się od drugiego miejsca, aż o nie cały milion dolarów, co jest znaczącą różnicą. 
+
+#### **Wnioski:**
+
+#### **Dominacja gry "Fortnite":** Gra "Fortnite" dominuje pod względem zarobków wśród gier.
+
+#### **Zróżnicowanie dochodów:** Takie gry jak "Fortnite" i "Dota 2" są najbardziej dochodowymi grami, które średnia pula nagród różni się od innych produkcji o miliony dolarów.
+
+
+
+
+
+
+# Zależność między liczbą organizowanych turnieji, a zarobkami.
+
+
+
+#### W świecie esportu, często organizuje się prestiżowe wydarzenia, głównie turnieje, które różnią się skalą oraz poziomem prestiżu. Warto skoncentrować się na tych największych, gdzie profesjonalni gracze mają szansę zdobyć znaczące nagrody finansowe. Rodzi to pytanie: **czy większa liczba zorganizowanych turniejów przekłada się na zwiększone możliwości zarobkowe dla zawodników?** Ten aspekt chcemy teraz zbadać, skupiając się na analizie ośmiu najbardziej popularnych gier esportowych.
+
+
+
+```{r}
+top20 <- dane %>%
+  group_by(Game) %>%
+  summarise(Zarobki = round(mean(Earnings), digits = 2),
+            Turnieje = round(mean(Tournaments), digits = 0))
+
+table <- data.frame(Games = top20$Game,
+                    Turnieje = top20$Turnieje,
+                    Earnings = top20$Zarobki)
+
+top20 <- head(arrange(table, desc(Turnieje)), 10)
+ 
+top20$Games[5] = "BATTLEGROUNDS Mobile"
+top20$Games[6] = "BATTLEGROUNDS"
+top20$Games[1] = "CS GO"
+
+ggplot(top20, aes(x = Turnieje, y = Earnings/1000000, label = Games, color = Games)) +
+  geom_point(size = 5) +
+  labs(
+    title = "Zależność między Liczbą Turniejów a Zarobkami",
+    x = "Liczba Turniejów",
+    y = "Zarobki(Mil)"
+  ) +
+  theme_minimal()
+
+
+```
+```{r}
+paste("Najwięcej turniejów przypada dla gry CS GO, liczba ta to:", max(top20$Turnieje))
+```
+
+
+#### Na podstawie wykresu możemy zauważyć, że liczba turniejów nie wydaje się mieć istotnego wpływu na poziom zarobków. Widoczne są znaczące, a nawet gwałtowne wzrosty, co sugeruje, że inne czynniki mają większy wpływ na tę zależność.Prawdopodobnie jest to związane z konkretną grą, która stanowi przedmiot danego turnieju, a nie samą liczbą zorganizowanych wydarzeń. 
+
+
+#### **Wnioski:**
+
+#### **Słaby wpływ na poziom zarobków:** Liczba turniejów nie jest jedynym czynnikiem odpowiedzialnym za poziom zarobków.
+
+#### **Niezależność zarobków od liczby turniejów:** Gwałtowne wzrosty, pomimo niewielkich zmian w liczbie turniejów, sugerują, że średnia pula nagród nie jest determinowana przez liczbe turniejów.
+
+
+
+
+
+# Badanie związku między popularnością gry, a zarobkami.
+
+#### W naszych danych znajdują się gry mało znane jak i bardzo popularne, do tego stopnia, że osoby nie interesujące się gaming-iem słyszały o tych grach. Nie zważając na poziom popularności gry, turnieje dla tego produktu są organizowane. **Czy zarobki w ESporcie są związane z popularnością danej gry?**
+
+```{r}
+
+SredniaGraczyZarobkiGry <- dane %>%
+group_by(Game) %>%  
+summarise(SredniaGraczyGry = round(mean(Players), digits = 0), SredniaZarobkow = mean(Earnings))  
+
+
+WykresPunktowy <- ggplot(SredniaGraczyZarobkiGry, aes(x = SredniaGraczyGry, y = SredniaZarobkow / 1000000))+
+  geom_point(size = 1, color = "red") +
+              labs(
+                x = "Srednia liczba graczy",
+                y = "Srednia liczba zarobków (Miliony)",
+                title = "Zależność między ilością graczy a średnią pulą nagród"
+              ) + 
+              theme_minimal()
+WykresPunktowy
+
+
+```
+
+
+#### Na podstawie analizy wykresu dochodzimy do wniosku, że poziom popularności danej gry nie jest jednoznacznym wskaźnikiem wysokości puli nagród w świecie esportu. Chociaż niektóre gry cieszą się dużym uznaniem i zainteresowaniem graczy, ich pule nagród utrzymują się na umiarkowanym poziomie. Z drugiej strony, istnieją gry o mniejszej popularności, ale charakteryzujące się znacząco wyższymi pulami nagród.
+
+#### **Wnioski:**
+
+#### **Umiarkowana zależność zmiennych:** Istnieje zależność między liczbą organizowanych turniejów, a poziomem zarobków, jednak jest to czynnik wpływający. 
+
+# Badanie trendu zarobków na przestrzeni lat.
+
+
+
+
+
+
+
+
+#### W dzisiejszym świecie technologia ciągle idzie do przodu w bardzo szybkim tempie. Nasze dane sięgają lat 90, gdzie technologia i Gaming były stosunkowo na niskim poziomie. Popularność ESportu wzrosła w poprzedniej dekadzie i co może przekładać się na kwestię pieniężną graczy. **Czy na przestrzeni lat trend zarobków jest wzrostowy?**
+
+
+
+```{r}
+trend<- europepmc::epmc_hits_trend(query = "Earnings", period = 1998:2022)
+
+trend %>%
+  ggplot(aes(x = factor(year), y = (query_hits / all_hits) * 100))+
+  geom_col(fill = "skyblue", width = 0.6, alpha = 0.9) +
+  labs(x = "Lata", y = "Procentowy udział wyników zapytania Zarobków") +
+  ggtitle("Trend wyników zapytania Zarobki w latach 1998-2022") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+```
+
+#### **Wnioski:** 
+
+#### **Dynamiczny wzrost:** Analizując dane dotyczące zarobków, zauważamy wyraźny rosnący trend w udziale procentowym zapytań dotyczących sumy pul nagród przez lata. Choć występują niewielkie spadki między 2002 a 2004 rokiem oraz między 2011 a 2013 rokiem, ogólny trend pozostaje wzrostowy.
+
+
+# Badanie związku popularności gry, a liczbą organizowanych turniejów.
+
+
+
+
+
+
+
+
+#### W miarę rosnącej popularności gier komputerowych, coraz więcej osób od najmłodszych lat zaczyna przejawiać zainteresowanie tym obszarem, które często przeradza się w prawdziwą pasję. **Czy z związku z powiększającą się ilością liczby graczy, zwiększa się także liczba organizowanych turniejów?**
+```{r}
+
+  wykres_korelacji <- ggplot(dane, aes(x = Players, y = Tournaments)) +
+    geom_point(color = "red") +
+    geom_smooth(method = "lm", se = FALSE, color = "blue") +
+    labs(title = "Zależność liniowa między Liczbą Graczy a Liczbą Turniejów",
+         x = "Liczba Graczy",
+         y = "Liczba Turniejów") +
+    theme_minimal()
+  
+wykres_korelacji
+
+
+```
+
+
+```{r}
+ korelacja <- cor(dane$Players, dane$Tournaments, method = "spearman")
+paste("Współczynnik korelacji:", korelacja)
+```
+#### **Wnioski**
+
+#### **Zależność liczby graczy między liczbą turniejów** Na podstawie współczynnika korelacji, możemy stwierdzić, że istnieje umiarkowana oraz dodatnia zależność między zmiennymi. Oznacza to, że wzrost liczby graczy jest skorelowany z wzrostem liczby turniejów, ale nie jest to połączenie idealne.
+
+
+# Zmiana liczby organizowanych turniejów na przestrzeni lat.
+
+
+
+
+
+
+
+
+#### Na podstawie posiadanych danych możemy zgłębić ewolucje liczby turniejów na przestrzeni lat. **W kontekście rosnącej popularności esportu, czy obserwujemy dynamiczną zmianę w liczbie organizowanych turniejów na przestrzeni czasu?**
+
+```{r}
+
+DaneTurniejowe <- dane %>%
+  group_by(Year = as.numeric(format(Date, "%Y"))) %>%
+
+  summarise(SredniaTurniejow = sum(Tournaments))
+
+ggplot(DaneTurniejowe, aes(x = Year, y = SredniaTurniejow))+
+  geom_bar(stat = "identity", fill = "blue", color = "black", width = 0.8) + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1)) +
+  theme_minimal() + 
+  labs(title = "Ilość turniejów zorganizowanych w danych latach",
+       x = "Lata", y = "Suma Turniejów" )
+
+```
+
+
+
+#### Analiza wyników ukazuje, że w okresie 1998 a 2010 roku widać stopniowy, chodź łagodny wzrost liczby turniejów, co mówi o kształtującej się stuktorze turniejowej. W latach 2010-2015, widać gwałtowny wzrost aktywności turniejów, co wskazuje na zwiększone zainteresowanie ESportem. W 2023 roku widać nagły spadek liczby turniejów, co może wskazywać na tendencje spadkową w przyszłych latach.
+
+#### **Wnioski**
+
+#### **Wzrost liczby turniejów w latach 1998-2010:** Obserwujemy stopniowy, lecz łagodny wzrost liczby turniejów, wskazujący na kształtowanie się struktury turniejowej.
+
+#### **Rosnące zainteresowanie E-Sportem w latach 2010-2015:** Gwałtowny wzrost aktywności turniejów, co świadczy o rosnącym zainteresowaniu e-sportem.
+
+#### **Tendencja spadkowa w roku 2023:** W 2023 roku widzimy nagły spadek liczby turniejów, co może sygnalizować tendencję spadkową w przyszłości.
+
+# Badanie sezonowości turniejów ESportowych w zależności od miesiąca.
+
+
+
+
+
+
+
+
+#### Teraz skupimy się na potencjalnych wzrocach sezonowości w liczbie turniejów esportowych na przestani ostatnich lat(2019 - 2022). **Cel tej analizy odpowiada nam na pytanie, czy liczba turniejów esportowych wykazuje sezonowość zależności od miesiąca, a jeżeli tak to w jaki sposób się kształtuje?**
+```{r}
+
+dane$Month <- format(dane$Date, "%m")
+dane$Year <- format(dane$Date, "%Y")
+lata <- dane %>%
+  filter(Year %in% (2019:2022))
+  
+wykres <- ggplot(lata, aes(x = Month, y = Tournaments, group = Year,
+                           color = Year)) +
+  stat_summary(fun = "sum", geom = "line", position = position_dodge(width = 0.8), size = 0.8) +
+  labs(title = "Liczba turniejów w danych miesiącach na przestrzeni lat (2019-2022)",
+       x = "Miesiąc",
+       y = "Liczba turniejów") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(hjust = 1)) +
+  scale_color_brewer(palette = "Set1")
+wykres
+```
+
+#### Na początku roku liczba turniejów utrzymuje się na stosunkowo niskim poziomie. Jednak od lutego do kwietnia/czerwca obserwujemy wyraźny trend wzrostowy. Następnie pojawia się tendencja spadkowa z niewielkimi skokami, które stopniowo przekształcają się w spadki aż do końca roku. W latach 2020-2021 zaobserwowano wzrost liczby turniejów od września do listopada, po czym nastał spadek. Rok 2022 stanowi pewne odstępstwo od tego trendu, gdzie najwięcej turniejów odnotowano w maju, a następnie wystąpił gwałtowny spadek w czerwcu. Po tym okresie sytuacja ustabilizowała się stosunkowo na stałym poziomie do końca roku.
+
+
+#### **Wnioski:** 
+
+#### **Wahania sezonowe:** Wyraźne sezonowe wahania są widoczne w liczbie turniejów, z tendencją wzrostową od lutego do kwietnia/czerwca, co może być związane z określonymi okresami sezonowymi lub wzmożonym zainteresowaniem e-sportem w tym czasie.
+
+#### **Większa ilość turniejów w drugiej połowie roku:** W drugiej połowie roku widać relatywnie stałą liczbę turniejów, w przeciwieństwie do początku roku, gdzie jest mało turniejów ale liczba ich dynamicznie rośnie. Oznacza to, że początek roku charakteryzuje się wzrostem liczby organizowanych turniejów, a koniec roku stabilnością aktywności turniejów.
+#### **Odstępstwo od trendu dla roku 2022:** W roku 2022 widać gwałtowny wzrost liczby turniejów w maju, jednak w drugiej połowie roku obserwujemy wyraźnie mniejszą liczbę turniejów w porównaniu do poprzednich lat.
+
+
+
+
+
+
+
+
+
+
+
+# Podsumowanie
+
+#### *Na podstawie analizy e-sportu można zaobserwować, że w przeciągu ostatnich 25 lat nastąpiła poprawa struktury tej branży. Pulę nagród podniesiono, liczba organizowanych turniejów zwiększyła się, a ogólna dynamika rozwoju była pozytywna. Niemniej jednak, po okresie pandemii COVID-19 zauważalne są pewne negatywne tendencje. Branża e-sportu doświadczyła pewnych trudności, co objawia się spadkiem statystyk i ogólnej aktywności w tej dziedzinie.*
